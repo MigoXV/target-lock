@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from math import degrees
 from dataclasses import dataclass
 from typing import Any
 
@@ -49,7 +50,8 @@ class AxisPid:
 @dataclass(frozen=True, slots=True)
 class PidAimConfig:
     open_loop: OpenLoopAimConfig
-    ff_gain: float = 0.35
+    scan_yaw_command: float = 0.35
+    scan_limit_rad: float = np.deg2rad(85.0)
     yaw_kp: float = 1.1
     yaw_ki: float = 0.08
     yaw_kd: float = 0.18
@@ -67,8 +69,6 @@ class PidAimMetrics(AimMetrics):
     plane_y: float
     azimuth_deg: float
     elevation_deg: float
-    yaw_ff: float
-    pitch_ff: float
     yaw_fb: float
     pitch_fb: float
     yaw_p: float
@@ -84,8 +84,6 @@ class PidAimMetrics(AimMetrics):
             "plane_y": self.plane_y,
             "azimuth_deg": self.azimuth_deg,
             "elevation_deg": self.elevation_deg,
-            "yaw_ff": self.yaw_ff,
-            "pitch_ff": self.pitch_ff,
             "yaw_fb": self.yaw_fb,
             "pitch_fb": self.pitch_fb,
             "yaw_p": self.yaw_p,
@@ -97,10 +95,27 @@ class PidAimMetrics(AimMetrics):
         }
 
 
+@dataclass(frozen=True, slots=True)
+class ScanAimMetrics(AimMetrics):
+    azimuth_deg: float
+    elevation_deg: float
+    turret_yaw_deg: float
+    scan_yaw_command: float
+
+    def as_dict(self) -> dict[str, float]:
+        return {
+            "azimuth_deg": self.azimuth_deg,
+            "elevation_deg": self.elevation_deg,
+            "turret_yaw_deg": self.turret_yaw_deg,
+            "scan_yaw_command": self.scan_yaw_command,
+        }
+
+
 class PidAimController(AimController):
     def __init__(self, config: PidAimConfig) -> None:
         self.config = config
         self.open_loop = OpenLoopAimController(config.open_loop)
+        self.scan_direction = 1.0
         self.yaw_pid = AxisPid(
             kp=config.yaw_kp,
             ki=config.yaw_ki,
@@ -119,22 +134,44 @@ class PidAimController(AimController):
         )
 
     def reset(self) -> None:
+        self.scan_direction = 1.0
         self.yaw_pid.reset()
         self.pitch_pid.reset()
+
+    def _scan_action(self, info: dict[str, Any]) -> tuple[np.ndarray, ScanAimMetrics]:
+        qpos = info.get("qpos")
+        turret_yaw = 0.0
+        if isinstance(qpos, list) and len(qpos) >= 4:
+            turret_yaw = float(qpos[3])
+            if turret_yaw >= self.config.scan_limit_rad:
+                self.scan_direction = -1.0
+            elif turret_yaw <= -self.config.scan_limit_rad:
+                self.scan_direction = 1.0
+
+        action = self.config.open_loop.action_layout.build_idle()
+        action[self.config.open_loop.action_layout.yaw_index] = self.scan_direction * self.config.scan_yaw_command
+        action[self.config.open_loop.action_layout.pitch_index] = 0.0
+        return action, ScanAimMetrics(
+            azimuth_deg=float("inf"),
+            elevation_deg=float("inf"),
+            turret_yaw_deg=degrees(turret_yaw),
+            scan_yaw_command=float(action[self.config.open_loop.action_layout.yaw_index]),
+        )
 
     def update(
         self,
         info: dict[str, Any],
         frame_shape: tuple[int, int, int],
         dt: float | None = None,
-    ) -> tuple[np.ndarray, PidAimMetrics] | None:
+    ) -> tuple[np.ndarray, PidAimMetrics | ScanAimMetrics] | None:
         if dt is None:
             raise ValueError("dt is required for PID controller")
 
         bullseye_pixel = info.get("bullseye_pixel")
         if not isinstance(bullseye_pixel, list) or len(bullseye_pixel) != 2:
-            self.reset()
-            return None
+            self.yaw_pid.reset()
+            self.pitch_pid.reset()
+            return self._scan_action(info)
 
         width = int(info.get("width", frame_shape[1]))
         height = int(info.get("height", frame_shape[0]))
@@ -145,21 +182,17 @@ class PidAimController(AimController):
             camera_fovx_deg=float(info["camera_fovx_deg"]),
         )
 
-        yaw_ff = self.config.ff_gain * (spherical.azimuth_rad / self.config.open_loop.yaw_step_rad)
-        pitch_ff = self.config.ff_gain * (spherical.elevation_rad / self.config.open_loop.pitch_step_rad)
-        yaw_fb, yaw_terms = self.yaw_pid.update(plane_x, dt)
+        yaw_fb, yaw_terms = self.yaw_pid.update(-plane_x, dt)
         pitch_fb, pitch_terms = self.pitch_pid.update(plane_y, dt)
 
         action = self.config.open_loop.action_layout.build_idle()
-        action[self.config.open_loop.action_layout.yaw_index] = np.clip(yaw_ff + yaw_fb, -1.0, 1.0)
-        action[self.config.open_loop.action_layout.pitch_index] = np.clip(pitch_ff + pitch_fb, -1.0, 1.0)
+        action[self.config.open_loop.action_layout.yaw_index] = np.clip(yaw_fb, -1.0, 1.0)
+        action[self.config.open_loop.action_layout.pitch_index] = np.clip(pitch_fb, -1.0, 1.0)
         return action, PidAimMetrics(
             plane_x=plane_x,
             plane_y=plane_y,
             azimuth_deg=spherical.azimuth_deg,
             elevation_deg=spherical.elevation_deg,
-            yaw_ff=float(yaw_ff),
-            pitch_ff=float(pitch_ff),
             yaw_fb=yaw_fb,
             pitch_fb=pitch_fb,
             yaw_p=yaw_terms["p"],

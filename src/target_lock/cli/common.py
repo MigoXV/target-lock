@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 import time
 from dataclasses import dataclass
 from typing import Callable
@@ -38,12 +39,20 @@ def _is_aligned(metrics: dict[str, float], threshold: AlignmentThreshold) -> boo
     return True
 
 
+def _clear_aim_action(action: np.ndarray, action_layout: ActionLayout) -> np.ndarray:
+    action[action_layout.yaw_index] = 0.0
+    action[action_layout.pitch_index] = 0.0
+    if action_layout.fire_index is not None:
+        action[action_layout.fire_index] = 0.0
+    return action
+
+
 def run_session(
     *,
     server_addr: str,
     controller: AimController,
     action_layout: ActionLayout,
-    max_steps: int,
+    max_steps: int | None,
     threshold: AlignmentThreshold,
     fire_when_aligned: bool,
     action_mutator: Callable[[int, np.ndarray], np.ndarray] | None = None,
@@ -58,9 +67,10 @@ def run_session(
         frame_rgb = session.reset()
         cv2.namedWindow("target-lock", cv2.WINDOW_NORMAL)
         action = action_layout.build_idle()
+        step_indices = range(max_steps) if max_steps is not None else itertools.count()
 
         try:
-            for step_idx in range(max_steps):
+            for step_idx in step_indices:
                 if action_mutator is not None:
                     action = action_mutator(step_idx, action.copy())
 
@@ -71,6 +81,8 @@ def run_session(
                 computed = controller.update(last_info, frame_rgb.shape, dt=CONTROL_DT)
                 if action_mutator is None:
                     action = action_layout.build_idle()
+                else:
+                    action = _clear_aim_action(action, action_layout)
                 last_metrics = None
                 if computed is not None:
                     aim_action, metrics = computed
@@ -95,10 +107,6 @@ def run_session(
                     fire_info = last_info.get("fire", {})
                     if isinstance(fire_info, dict):
                         print(f"[FIRE] {fire_info}")
-                    display = _build_display(frame_rgb, last_info, last_metrics)
-                    cv2.imshow("target-lock", display)
-                    cv2.waitKey(0)
-                    break
 
                 if step_idx % FRAME_SKIP == 0:
                     display = _build_display(frame_rgb, last_info, last_metrics)

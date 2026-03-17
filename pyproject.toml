@@ -6,32 +6,28 @@ readme = "README.md"
 requires-python = ">=3.10,<3.13"
 dependencies = [
     "numpy<2.3",
-]
-
-[project.optional-dependencies]
-sim = [
     "grpcio>=1.78.0,<2.0.0",
     "protobuf>=7.34.0,<8.0.0",
     "opencv-python>=4.13.0.92,<5.0.0.0",
-]
-dev = [
-    "pytest>=8.3.0,<9.0.0",
+    "typer (>=0.24.1,<0.25.0)",
 ]
 
+[tool.poetry]
+packages = [{include = "target_lock", from = "src"}]
+
 [project.scripts]
+target-lock = "target_lock.commands.app:main"
 target-lock-static = "target_lock.cli.static_open_loop:main"
 target-lock-move = "target_lock.cli.move_open_loop:main"
 target-lock-square-pid = "target_lock.cli.square_pid:main"
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
 
-[tool.setuptools]
-package-dir = {"" = "src"}
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[[tool.poetry.source]]
+name = "tuna"
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+priority = "primary"
 
 [build-system]
-requires = ["setuptools>=69", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

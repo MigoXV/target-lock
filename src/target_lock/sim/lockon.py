@@ -2,22 +2,16 @@ from __future__ import annotations
 
 import os
 import queue
-import sys
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Iterator
 
 import numpy as np
 
+from target_lock.protos.lockon import gym_env_pb2, gym_env_pb2_grpc
+
 
 DEFAULT_SERVER_ADDR = os.getenv("LOCKON_SERVER_ADDR", "127.0.0.1:50051")
 STREAM_END = object()
-
-
-@dataclass(frozen=True, slots=True)
-class LockonPaths:
-    repo_root: Path
-    src_root: Path
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,43 +23,46 @@ class StepResult:
     truncated: bool
 
 
-def ensure_lockon_importable() -> LockonPaths:
-    env_path = os.getenv("TARGET_LOCK_LOCKON_PATH")
-    candidates: list[Path] = []
-    if env_path:
-        candidates.append(Path(env_path))
-
-    cwd = Path.cwd()
-    candidates.extend(
-        [
-            cwd.parent / "lockon" / "src",
-            cwd.parent / "lockon",
-            Path(r"D:\academic\python\lockon\src"),
-            Path(r"D:\academic\python\lockon"),
-        ]
+def tensor_from_array(array: np.ndarray) -> gym_env_pb2.Tensor:
+    contiguous = np.ascontiguousarray(array)
+    return gym_env_pb2.Tensor(
+        data=contiguous.tobytes(),
+        shape=contiguous.shape,
+        dtype=str(contiguous.dtype),
     )
 
-    for candidate in candidates:
-        src_root = candidate if candidate.name == "src" else candidate / "src"
-        if (src_root / "lockon").exists():
-            resolved = str(src_root.resolve())
-            if resolved not in sys.path:
-                sys.path.insert(0, resolved)
-            return LockonPaths(repo_root=src_root.parent, src_root=src_root)
 
-    raise ModuleNotFoundError(
-        "Unable to locate the lockon package. Set TARGET_LOCK_LOCKON_PATH to the lockon src directory."
-    )
+def array_from_tensor(tensor: gym_env_pb2.Tensor) -> np.ndarray:
+    array = np.frombuffer(tensor.data, dtype=np.dtype(tensor.dtype))
+    shape = tuple(int(dim) for dim in tensor.shape)
+    if shape:
+        return array.reshape(shape)
+    return array.reshape(())
+
+
+class ObservationDecoder:
+    def __init__(self, tensor_dtype: str) -> None:
+        self.tensor_dtype = tensor_dtype
+
+    def reset(self) -> None:
+        return None
+
+    def close(self) -> None:
+        return None
+
+    def decode(self, observation: gym_env_pb2.Tensor, info: dict[str, object]) -> np.ndarray:
+        del info
+        return array_from_tensor(observation)
+
+
+def create_observation_decoder(tensor_dtype: str) -> ObservationDecoder:
+    return ObservationDecoder(tensor_dtype)
 
 
 class LockonSession:
     def __init__(self, server_addr: str = DEFAULT_SERVER_ADDR) -> None:
-        ensure_lockon_importable()
         import grpc
         from google.protobuf.json_format import MessageToDict
-        from lockon.protos.gym_env import gym_env_pb2, gym_env_pb2_grpc
-        from lockon.utils import array_from_tensor, tensor_from_array
-        from lockon.vcodec import create_observation_decoder
 
         self.grpc = grpc
         self.MessageToDict = MessageToDict

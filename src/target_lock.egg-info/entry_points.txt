@@ -1,3 +1,0 @@
-[console_scripts]
-target-lock-move = target_lock.cli.move_open_loop:main
-target-lock-static = target_lock.cli.static_open_loop:main
