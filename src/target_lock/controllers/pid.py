@@ -49,7 +49,6 @@ class AxisPid:
 @dataclass(frozen=True, slots=True)
 class PidAimConfig:
     open_loop: OpenLoopAimConfig
-    ff_gain: float = 0.35
     yaw_kp: float = 1.1
     yaw_ki: float = 0.08
     yaw_kd: float = 0.18
@@ -67,8 +66,6 @@ class PidAimMetrics(AimMetrics):
     plane_y: float
     azimuth_deg: float
     elevation_deg: float
-    yaw_ff: float
-    pitch_ff: float
     yaw_fb: float
     pitch_fb: float
     yaw_p: float
@@ -84,8 +81,6 @@ class PidAimMetrics(AimMetrics):
             "plane_y": self.plane_y,
             "azimuth_deg": self.azimuth_deg,
             "elevation_deg": self.elevation_deg,
-            "yaw_ff": self.yaw_ff,
-            "pitch_ff": self.pitch_ff,
             "yaw_fb": self.yaw_fb,
             "pitch_fb": self.pitch_fb,
             "yaw_p": self.yaw_p,
@@ -145,21 +140,17 @@ class PidAimController(AimController):
             camera_fovx_deg=float(info["camera_fovx_deg"]),
         )
 
-        yaw_ff = self.config.ff_gain * (spherical.azimuth_rad / self.config.open_loop.yaw_step_rad)
-        pitch_ff = self.config.ff_gain * (spherical.elevation_rad / self.config.open_loop.pitch_step_rad)
         yaw_fb, yaw_terms = self.yaw_pid.update(plane_x, dt)
         pitch_fb, pitch_terms = self.pitch_pid.update(plane_y, dt)
 
         action = self.config.open_loop.action_layout.build_idle()
-        action[self.config.open_loop.action_layout.yaw_index] = np.clip(yaw_ff + yaw_fb, -1.0, 1.0)
-        action[self.config.open_loop.action_layout.pitch_index] = np.clip(pitch_ff + pitch_fb, -1.0, 1.0)
+        action[self.config.open_loop.action_layout.yaw_index] = np.clip(yaw_fb, -1.0, 1.0)
+        action[self.config.open_loop.action_layout.pitch_index] = np.clip(pitch_fb, -1.0, 1.0)
         return action, PidAimMetrics(
             plane_x=plane_x,
             plane_y=plane_y,
             azimuth_deg=spherical.azimuth_deg,
             elevation_deg=spherical.elevation_deg,
-            yaw_ff=float(yaw_ff),
-            pitch_ff=float(pitch_ff),
             yaw_fb=yaw_fb,
             pitch_fb=pitch_fb,
             yaw_p=yaw_terms["p"],
