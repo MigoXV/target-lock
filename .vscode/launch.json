@@ -5,12 +5,13 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "lockon",
+            "name": "move",
             "type": "debugpy",
             "request": "launch",
-            "program": "src/target_lock/cli/common.py",
+            "program": "src/target_lock/commands/app.py",
             "console": "integratedTerminal",
-            "envFile": "${workspaceFolder}/.env"
+            "envFile": "${workspaceFolder}/.env",
+            "args": ["move"]
         },
         {
             "name": "Python 调试程序: 当前文件",

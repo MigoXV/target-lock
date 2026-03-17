@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import numpy as np
+
+from target_lock.cli.common import _clear_aim_action
 from target_lock.controllers import ActionLayout, OpenLoopAimConfig, OpenLoopAimController, PidAimConfig, PidAimController
 
 
@@ -37,3 +40,13 @@ def test_pid_controller_resets_when_target_missing() -> None:
     assert action.shape == (6,)
     assert controller.update({}, (480, 640, 3), dt=0.01) is None
     assert controller.yaw_pid.initialized is False
+
+
+def test_clear_aim_action_preserves_non_aim_axes() -> None:
+    layout = ActionLayout(size=6, yaw_index=3, pitch_index=4, fire_index=5)
+    action = np.array([0.2, -0.3, 0.4, 0.9, -0.8, 1.0], dtype=np.float32)
+
+    cleared = _clear_aim_action(action.copy(), layout)
+
+    assert np.allclose(cleared[:3], np.array([0.2, -0.3, 0.4], dtype=np.float32))
+    assert np.allclose(cleared[3:], np.zeros(3, dtype=np.float32))

@@ -30,6 +30,10 @@ MaxStepsOption = Annotated[
     int,
     typer.Option(help="Maximum number of control loop steps to run."),
 ]
+MoveMaxStepsOption = Annotated[
+    int | None,
+    typer.Option(help="Maximum number of control loop steps to run. Leave empty for endless mode."),
+]
 AlignThresholdOption = Annotated[
     float,
     typer.Option(help="Alignment threshold in degrees for azimuth and elevation."),
@@ -44,7 +48,7 @@ PitchStepOption = Annotated[
 ]
 FireOption = Annotated[
     bool,
-    typer.Option("--fire/--no-fire", help="Fire once the target is aligned."),
+    typer.Option("--fire/--no-fire", help="Fire whenever the target becomes aligned."),
 ]
 
 
@@ -85,15 +89,19 @@ def static_open_loop(
 @app.command("move")
 def move_open_loop(
     server_addr: ServerAddrOption = "127.0.0.1:50051",
-    max_steps: MaxStepsOption = 2000,
+    max_steps: MoveMaxStepsOption = None,
     align_threshold_deg: AlignThresholdOption = 0.25,
     yaw_step_rad: YawStepOption = 0.08,
     pitch_step_rad: PitchStepOption = 0.08,
-    move_x: Annotated[float, typer.Option(help="Base X velocity command.")] = 0.02,
-    move_y: Annotated[float, typer.Option(help="Base Y velocity command.")] = 0.02,
-    base_rot: Annotated[float, typer.Option(help="Base rotation command.")] = 0.0,
+    move_speed: Annotated[float, typer.Option(help="Maximum random planar speed magnitude.")] = 0.03,
+    base_rot_scale: Annotated[float, typer.Option(help="Maximum random base rotation magnitude.")] = 0.15,
+    hold_steps: Annotated[int, typer.Option(help="Steps to hold each random movement sample.")] = 60,
+    seed: Annotated[int, typer.Option(help="Random seed for movement sampling.")] = 0,
     fire_when_aligned: FireOption = True,
 ) -> None:
+    rng = np.random.default_rng(seed)
+    current_motion = np.zeros(3, dtype=np.float32)
+
     action_layout = _build_action_layout()
     controller = OpenLoopAimController(
         OpenLoopAimConfig(
@@ -104,10 +112,18 @@ def move_open_loop(
     )
 
     def action_mutator(step_idx: int, action: np.ndarray) -> np.ndarray:
-        del step_idx
-        action[0] = move_x
-        action[1] = move_y
-        action[2] = base_rot
+        nonlocal current_motion
+        current_motion = _random_trajectory_action(
+            step_idx,
+            current_motion,
+            rng=rng,
+            hold_steps=hold_steps,
+            move_speed=move_speed,
+            base_rot_scale=base_rot_scale,
+        )
+        action[0] = current_motion[0]
+        action[1] = current_motion[1]
+        action[2] = current_motion[2]
         return action
 
     run_session(
@@ -122,6 +138,29 @@ def move_open_loop(
         fire_when_aligned=fire_when_aligned,
         action_mutator=action_mutator,
     )
+
+
+def _random_trajectory_action(
+    step_idx: int,
+    current_motion: np.ndarray,
+    *,
+    rng: np.random.Generator,
+    hold_steps: int,
+    move_speed: float,
+    base_rot_scale: float,
+) -> np.ndarray:
+    if step_idx % max(hold_steps, 1) == 0:
+        angle = float(rng.uniform(0.0, 2.0 * np.pi))
+        speed = float(rng.uniform(0.0, move_speed))
+        current_motion = np.array(
+            [
+                speed * np.cos(angle),
+                speed * np.sin(angle),
+                rng.uniform(-base_rot_scale, base_rot_scale),
+            ],
+            dtype=np.float32,
+        )
+    return current_motion
 
 
 def _square_trajectory_action(
