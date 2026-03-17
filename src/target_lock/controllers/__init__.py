@@ -1,6 +1,6 @@
 from target_lock.controllers.base import ActionLayout, AimController, AimMetrics
 from target_lock.controllers.open_loop import OpenLoopAimConfig, OpenLoopAimController, OpenLoopMetrics
-from target_lock.controllers.pid import AxisPid, PidAimConfig, PidAimController, PidAimMetrics
+from target_lock.controllers.pid import AxisPid, PidAimConfig, PidAimController, PidAimMetrics, ScanAimMetrics
 
 __all__ = [
     "ActionLayout",
@@ -13,4 +13,5 @@ __all__ = [
     "PidAimConfig",
     "PidAimController",
     "PidAimMetrics",
+    "ScanAimMetrics",
 ]

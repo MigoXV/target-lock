@@ -80,7 +80,7 @@ class OpenLoopAimController(AimController):
         )
 
         yaw_command = float(
-            np.clip(spherical.azimuth_rad / self.config.yaw_step_rad, -self.config.clip_limit, self.config.clip_limit)
+            np.clip(-spherical.azimuth_rad / self.config.yaw_step_rad, -self.config.clip_limit, self.config.clip_limit)
         )
         pitch_command = float(
             np.clip(

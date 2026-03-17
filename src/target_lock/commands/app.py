@@ -56,6 +56,45 @@ def _build_action_layout() -> ActionLayout:
     return ActionLayout(size=6, yaw_index=3, pitch_index=4, fire_index=5)
 
 
+def _build_pid_controller(
+    *,
+    action_layout: ActionLayout,
+    yaw_step_rad: float,
+    pitch_step_rad: float,
+    scan_yaw_command: float,
+    scan_limit_deg: float,
+    yaw_kp: float,
+    yaw_ki: float,
+    yaw_kd: float,
+    pitch_kp: float,
+    pitch_ki: float,
+    pitch_kd: float,
+    pid_deadband: float,
+    integral_limit: float,
+    feedback_limit: float,
+) -> PidAimController:
+    return PidAimController(
+        PidAimConfig(
+            open_loop=OpenLoopAimConfig(
+                yaw_step_rad=yaw_step_rad,
+                pitch_step_rad=pitch_step_rad,
+                action_layout=action_layout,
+            ),
+            scan_yaw_command=scan_yaw_command,
+            scan_limit_rad=np.deg2rad(scan_limit_deg),
+            yaw_kp=yaw_kp,
+            yaw_ki=yaw_ki,
+            yaw_kd=yaw_kd,
+            pitch_kp=pitch_kp,
+            pitch_ki=pitch_ki,
+            pitch_kd=pitch_kd,
+            pid_deadband=pid_deadband,
+            integral_limit=integral_limit,
+            feedback_limit=feedback_limit,
+        )
+    )
+
+
 @app.command("static")
 def static_open_loop(
     server_addr: ServerAddrOption = "127.0.0.1:50051",
@@ -90,25 +129,46 @@ def static_open_loop(
 def move_open_loop(
     server_addr: ServerAddrOption = "127.0.0.1:50051",
     max_steps: MoveMaxStepsOption = None,
-    align_threshold_deg: AlignThresholdOption = 0.25,
+    align_threshold_deg: AlignThresholdOption = 0.18,
+    plane_threshold: Annotated[float, typer.Option(help="Image plane alignment threshold.")] = 0.01,
     yaw_step_rad: YawStepOption = 0.08,
     pitch_step_rad: PitchStepOption = 0.08,
-    move_speed: Annotated[float, typer.Option(help="Maximum random planar speed magnitude.")] = 0.03,
-    base_rot_scale: Annotated[float, typer.Option(help="Maximum random base rotation magnitude.")] = 0.15,
-    hold_steps: Annotated[int, typer.Option(help="Steps to hold each random movement sample.")] = 60,
+    move_speed: Annotated[float, typer.Option(help="Maximum random planar speed magnitude.")] = 0.012,
+    base_rot_scale: Annotated[float, typer.Option(help="Maximum random base rotation magnitude.")] = 0.025,
+    hold_steps: Annotated[int, typer.Option(help="Steps to hold each random movement sample.")] = 120,
     seed: Annotated[int, typer.Option(help="Random seed for movement sampling.")] = 0,
+    scan_yaw_command: Annotated[float, typer.Option(help="Horizontal scan command used while the target is out of view.")] = 0.2,
+    scan_limit_deg: Annotated[float, typer.Option(help="Scan reversal limit in degrees for turret yaw.")] = 85.0,
+    yaw_kp: Annotated[float, typer.Option(help="Yaw PID proportional gain.")] = 2.4,
+    yaw_ki: Annotated[float, typer.Option(help="Yaw PID integral gain.")] = 0.05,
+    yaw_kd: Annotated[float, typer.Option(help="Yaw PID derivative gain.")] = 0.32,
+    pitch_kp: Annotated[float, typer.Option(help="Pitch PID proportional gain.")] = 2.4,
+    pitch_ki: Annotated[float, typer.Option(help="Pitch PID integral gain.")] = 0.05,
+    pitch_kd: Annotated[float, typer.Option(help="Pitch PID derivative gain.")] = 0.32,
+    pid_deadband: Annotated[float, typer.Option(help="PID deadband threshold.")] = 0.001,
+    integral_limit: Annotated[float, typer.Option(help="Integral clamp limit.")] = 0.25,
+    feedback_limit: Annotated[float, typer.Option(help="Feedback clamp limit.")] = 0.65,
     fire_when_aligned: FireOption = True,
 ) -> None:
     rng = np.random.default_rng(seed)
     current_motion = np.zeros(3, dtype=np.float32)
 
     action_layout = _build_action_layout()
-    controller = OpenLoopAimController(
-        OpenLoopAimConfig(
-            yaw_step_rad=yaw_step_rad,
-            pitch_step_rad=pitch_step_rad,
-            action_layout=action_layout,
-        )
+    controller = _build_pid_controller(
+        action_layout=action_layout,
+        yaw_step_rad=yaw_step_rad,
+        pitch_step_rad=pitch_step_rad,
+        scan_yaw_command=scan_yaw_command,
+        scan_limit_deg=scan_limit_deg,
+        yaw_kp=yaw_kp,
+        yaw_ki=yaw_ki,
+        yaw_kd=yaw_kd,
+        pitch_kp=pitch_kp,
+        pitch_ki=pitch_ki,
+        pitch_kd=pitch_kd,
+        pid_deadband=pid_deadband,
+        integral_limit=integral_limit,
+        feedback_limit=feedback_limit,
     )
 
     def action_mutator(step_idx: int, action: np.ndarray) -> np.ndarray:
@@ -134,6 +194,8 @@ def move_open_loop(
         threshold=AlignmentThreshold(
             azimuth_deg=align_threshold_deg,
             elevation_deg=align_threshold_deg,
+            plane_x=plane_threshold,
+            plane_y=plane_threshold,
         ),
         fire_when_aligned=fire_when_aligned,
         action_mutator=action_mutator,
@@ -201,6 +263,8 @@ def square_pid(
     random_rot_scale: Annotated[float, typer.Option(help="Random base rotation scale.")] = 0.35,
     random_rot_hold_steps: Annotated[int, typer.Option(help="Steps to hold each random rotation sample.")] = 60,
     seed: Annotated[int, typer.Option(help="Random seed for rotation sampling.")] = 0,
+    scan_yaw_command: Annotated[float, typer.Option(help="Horizontal scan command used while the target is out of view.")] = 0.35,
+    scan_limit_deg: Annotated[float, typer.Option(help="Scan reversal limit in degrees for turret yaw.")] = 85.0,
     yaw_kp: Annotated[float, typer.Option(help="Yaw PID proportional gain.")] = 1.8,
     yaw_ki: Annotated[float, typer.Option(help="Yaw PID integral gain.")] = 0.12,
     yaw_kd: Annotated[float, typer.Option(help="Yaw PID derivative gain.")] = 0.24,
@@ -217,23 +281,21 @@ def square_pid(
     target_base_rot = float(base_rot)
 
     action_layout = _build_action_layout()
-    controller = PidAimController(
-        PidAimConfig(
-            open_loop=OpenLoopAimConfig(
-                yaw_step_rad=yaw_step_rad,
-                pitch_step_rad=pitch_step_rad,
-                action_layout=action_layout,
-            ),
-            yaw_kp=yaw_kp,
-            yaw_ki=yaw_ki,
-            yaw_kd=yaw_kd,
-            pitch_kp=pitch_kp,
-            pitch_ki=pitch_ki,
-            pitch_kd=pitch_kd,
-            pid_deadband=pid_deadband,
-            integral_limit=integral_limit,
-            feedback_limit=feedback_limit,
-        )
+    controller = _build_pid_controller(
+        action_layout=action_layout,
+        yaw_step_rad=yaw_step_rad,
+        pitch_step_rad=pitch_step_rad,
+        scan_yaw_command=scan_yaw_command,
+        scan_limit_deg=scan_limit_deg,
+        yaw_kp=yaw_kp,
+        yaw_ki=yaw_ki,
+        yaw_kd=yaw_kd,
+        pitch_kp=pitch_kp,
+        pitch_ki=pitch_ki,
+        pitch_kd=pitch_kd,
+        pid_deadband=pid_deadband,
+        integral_limit=integral_limit,
+        feedback_limit=feedback_limit,
     )
 
     def action_mutator(step_idx: int, action: np.ndarray) -> np.ndarray:
