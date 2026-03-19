@@ -9,7 +9,6 @@ import cv2
 import numpy as np
 
 
-DEFAULT_AUTOAIM_REPO = Path(r"D:\academic\python\autoaim")
 DEFAULT_AUTOAIM_MODEL = Path("yolo") / "point_yolo_v8.onnx"
 LEGACY_AUTOAIM_MODEL = Path("point_yolo.onnx")
 AUTOAIM_REPO_ENV_VARS = ("TARGET_LOCK_AUTOAIM_REPO", "AUTOAIM_REPO")
@@ -88,7 +87,12 @@ def resolve_autoaim_repo(autoaim_repo: str | Path | None = None) -> Path:
     if configured_repo is not None:
         return Path(configured_repo).expanduser()
 
-    return DEFAULT_AUTOAIM_REPO.expanduser()
+    env_hint = ", ".join(AUTOAIM_REPO_ENV_VARS)
+    onnx_hint = ", ".join(AUTOAIM_ONNX_ENV_VARS)
+    raise ValueError(
+        "Autoaim model location is not configured. "
+        f"Pass --autoaim-repo or --onnx-path, or set one of: {env_hint}, {onnx_hint}."
+    )
 
 
 def resolve_autoaim_onnx_path(autoaim_repo: str | Path | None, onnx_path: str | Path | None = None) -> Path:

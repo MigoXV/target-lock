@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from target_lock.vision import DEFAULT_AUTOAIM_MODEL, resolve_autoaim_onnx_path
 
 
@@ -20,6 +22,20 @@ def test_resolve_autoaim_onnx_path_prefers_explicit_path(tmp_path: Path) -> None
     resolved = resolve_autoaim_onnx_path(None, explicit_model)
 
     assert resolved == explicit_model
+
+
+def test_resolve_autoaim_onnx_path_requires_configuration(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("TARGET_LOCK_AUTOAIM_REPO", raising=False)
+    monkeypatch.delenv("AUTOAIM_REPO", raising=False)
+    monkeypatch.delenv("TARGET_LOCK_ONNX_PATH", raising=False)
+    monkeypatch.delenv("ONNX_PATH", raising=False)
+
+    with pytest.raises(ValueError, match="Autoaim model location is not configured"):
+        resolve_autoaim_onnx_path(None, None)
 
 
 def test_resolve_autoaim_onnx_path_reads_repo_from_environment(

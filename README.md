@@ -39,15 +39,15 @@ target-lock-move --server-addr 127.0.0.1:50051
 target-lock-square-pid --server-addr 127.0.0.1:50051
 ```
 
-Model path configuration can come from CLI options, environment variables, or a `.env` file.
-CLI options have the highest priority.
+Model path configuration must be provided through CLI options, environment variables, or a `.env` file.
+CLI options have the highest priority, and there is no built-in fallback repo path anymore.
 
 ```powershell
 $env:TARGET_LOCK_AUTOAIM_REPO="D:\academic\python\autoaim"
 $env:TARGET_LOCK_ONNX_PATH="D:\academic\python\autoaim\yolo\point_yolo_v8.onnx"
 ```
 
-You can also create a project-local `.env` file:
+You can also create a project-local `.env` file from `.env.example` and fill in your local paths:
 
 ```env
 TARGET_LOCK_AUTOAIM_REPO=D:\academic\python\autoaim

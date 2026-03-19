@@ -1,3 +1,6 @@
 lock/
 __pycache__/
 src\target_lock.egg-info/
+.env
+.env.*
+!.env.example
