@@ -10,7 +10,7 @@ import numpy as np
 
 from target_lock.controllers import ActionLayout, AimController
 from target_lock.sim import LockonSession
-from target_lock.vision import BullseyeDetector, BullseyeDetection
+from target_lock.vision import BullseyeDetection, BullseyeDetector
 
 
 CONTROL_DT = 0.01

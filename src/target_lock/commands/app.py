@@ -5,7 +5,6 @@ from typing import Annotated
 import numpy as np
 import typer
 
-from target_lock.cli.common import AlignmentThreshold, BullseyeSource, run_session
 from target_lock.controllers import (
     ActionLayout,
     OpenLoopAimConfig,
@@ -13,6 +12,7 @@ from target_lock.controllers import (
     PidAimConfig,
     PidAimController,
 )
+from target_lock.runtime import AlignmentThreshold, BullseyeSource, run_session
 from target_lock.vision import YoloBullseyeDetector
 
 
@@ -59,6 +59,19 @@ BullseyeSourceOption = Annotated[
 
 def _build_action_layout() -> ActionLayout:
     return ActionLayout(size=6, yaw_index=3, pitch_index=4, fire_index=5)
+
+
+def _build_alignment_threshold(
+    *,
+    align_threshold_deg: float,
+    plane_threshold: float | None = None,
+) -> AlignmentThreshold:
+    return AlignmentThreshold(
+        azimuth_deg=align_threshold_deg,
+        elevation_deg=align_threshold_deg,
+        plane_x=plane_threshold,
+        plane_y=plane_threshold,
+    )
 
 
 def _build_pid_controller(
@@ -119,7 +132,7 @@ def _build_bullseye_detector(
 
 
 @app.command("static")
-def static_open_loop(
+def static_demo(
     server_addr: ServerAddrOption = "127.0.0.1:50051",
     max_steps: MaxStepsOption = 1000,
     align_threshold_deg: AlignThresholdOption = 0.25,
@@ -152,10 +165,7 @@ def static_open_loop(
         controller=controller,
         action_layout=action_layout,
         max_steps=max_steps,
-        threshold=AlignmentThreshold(
-            azimuth_deg=align_threshold_deg,
-            elevation_deg=align_threshold_deg,
-        ),
+        threshold=_build_alignment_threshold(align_threshold_deg=align_threshold_deg),
         fire_when_aligned=fire_when_aligned,
         bullseye_source=bullseye_source,
         bullseye_detector=bullseye_detector,
@@ -163,7 +173,7 @@ def static_open_loop(
 
 
 @app.command("move")
-def move_open_loop(
+def move_pid(
     server_addr: ServerAddrOption = "127.0.0.1:50051",
     max_steps: MoveMaxStepsOption = None,
     align_threshold_deg: AlignThresholdOption = 0.18,
@@ -240,11 +250,9 @@ def move_open_loop(
         controller=controller,
         action_layout=action_layout,
         max_steps=max_steps,
-        threshold=AlignmentThreshold(
-            azimuth_deg=align_threshold_deg,
-            elevation_deg=align_threshold_deg,
-            plane_x=plane_threshold,
-            plane_y=plane_threshold,
+        threshold=_build_alignment_threshold(
+            align_threshold_deg=align_threshold_deg,
+            plane_threshold=plane_threshold,
         ),
         fire_when_aligned=fire_when_aligned,
         action_mutator=action_mutator,
@@ -384,17 +392,23 @@ def square_pid(
         controller=controller,
         action_layout=action_layout,
         max_steps=max_steps,
-        threshold=AlignmentThreshold(
-            azimuth_deg=align_threshold_deg,
-            elevation_deg=align_threshold_deg,
-            plane_x=plane_threshold,
-            plane_y=plane_threshold,
+        threshold=_build_alignment_threshold(
+            align_threshold_deg=align_threshold_deg,
+            plane_threshold=plane_threshold,
         ),
         fire_when_aligned=fire_when_aligned,
         action_mutator=action_mutator,
         bullseye_source=bullseye_source,
         bullseye_detector=bullseye_detector,
     )
+
+
+def legacy_static_main() -> None:
+    app(prog_name="target-lock-static", args=["static"])
+
+
+def legacy_square_pid_main() -> None:
+    app(prog_name="target-lock-square-pid", args=["square-pid"])
 
 
 def main() -> None:

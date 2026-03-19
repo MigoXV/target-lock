@@ -5,9 +5,9 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from target_lock.cli import common as common_module
-from target_lock.cli.common import AlignmentThreshold, run_session
 from target_lock.controllers import ActionLayout
+from target_lock import runtime as common_module
+from target_lock.runtime import AlignmentThreshold, run_session
 
 
 class _AlignedMetrics:

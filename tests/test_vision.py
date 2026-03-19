@@ -45,6 +45,7 @@ def test_resolve_autoaim_onnx_path_reads_repo_from_environment(
     repo_dir = tmp_path / "env-autoaim"
     expected_model = _create_model_file(repo_dir)
 
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("TARGET_LOCK_AUTOAIM_REPO", str(repo_dir))
     monkeypatch.delenv("AUTOAIM_REPO", raising=False)
     monkeypatch.delenv("TARGET_LOCK_ONNX_PATH", raising=False)

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from target_lock.cli.common import BullseyeSource, _clear_aim_action, _resolve_tracking_info
 from target_lock.controllers import ActionLayout, OpenLoopAimConfig, OpenLoopAimController, PidAimConfig, PidAimController
+from target_lock.runtime import BullseyeSource, _clear_aim_action, _resolve_tracking_info
 from target_lock.vision import BullseyeDetection
 
 

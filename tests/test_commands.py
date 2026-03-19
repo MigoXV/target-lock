@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typer.testing import CliRunner
 
-from target_lock.cli.common import AlignmentThreshold, BullseyeSource
 from target_lock.commands import app as app_module
 from target_lock.controllers import PidAimController
+from target_lock.runtime import AlignmentThreshold, BullseyeSource
 
 
 runner = CliRunner()

@@ -18,9 +18,9 @@ packages = [{include = "target_lock", from = "src"}]
 
 [project.scripts]
 target-lock = "target_lock.commands.app:main"
-target-lock-static = "target_lock.cli.static_open_loop:main"
-target-lock-move = "target_lock.cli.move_open_loop:main"
-target-lock-square-pid = "target_lock.cli.square_pid:main"
+target-lock-static = "target_lock.commands.app:legacy_static_main"
+target-lock-move = "target_lock.cli.legacy_move:main"
+target-lock-square-pid = "target_lock.commands.app:legacy_square_pid_main"
 
 
 

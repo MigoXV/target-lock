@@ -14,12 +14,15 @@ from target_lock.geometry import (
     backproject_to_spherical,
     direction_to_spherical,
 )
+from target_lock.runtime import AlignmentThreshold, BullseyeSource
 from target_lock.vision import BullseyeDetection, YoloBullseyeDetector
 
 __all__ = [
     "ActionLayout",
+    "AlignmentThreshold",
     "AxisPid",
     "BullseyeDetection",
+    "BullseyeSource",
     "OpenLoopAimConfig",
     "OpenLoopAimController",
     "OpenLoopMetrics",
