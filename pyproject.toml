@@ -9,6 +9,7 @@ dependencies = [
     "grpcio>=1.78.0,<2.0.0",
     "protobuf>=7.34.0,<8.0.0",
     "opencv-python>=4.13.0.92,<5.0.0.0",
+    "onnxruntime>=1.23.2,<2.0.0",
     "typer (>=0.24.1,<0.25.0)",
 ]
 

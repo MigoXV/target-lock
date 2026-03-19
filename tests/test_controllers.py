@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import numpy as np
 
-from target_lock.cli.common import _clear_aim_action
+from target_lock.cli.common import BullseyeSource, _clear_aim_action, _resolve_tracking_info
 from target_lock.controllers import ActionLayout, OpenLoopAimConfig, OpenLoopAimController, PidAimConfig, PidAimController
+from target_lock.vision import BullseyeDetection
 
 
 def _info() -> dict[str, object]:
@@ -85,3 +86,46 @@ def test_pid_controller_hands_off_from_scan_to_tracking() -> None:
     assert "plane_x" in track_metrics.as_dict()
     assert track_action[3] < 0.0
     assert track_action[3] != scan_action[3]
+
+
+def test_resolve_tracking_info_replaces_oracle_with_vision_detection() -> None:
+    class FakeDetector:
+        def detect(self, frame_rgb: np.ndarray) -> BullseyeDetection | None:
+            return BullseyeDetection(pixel_x=123.5, pixel_y=45.25, score=0.9, x_norm=0.2, y_norm=0.3)
+
+    resolved = _resolve_tracking_info(
+        {
+            "bullseye_pixel": [480, 120],
+            "camera_fovy_deg": 60.0,
+            "camera_fovx_deg": 80.0,
+        },
+        np.zeros((480, 640, 3), dtype=np.uint8),
+        bullseye_source=BullseyeSource.VISION,
+        bullseye_detector=FakeDetector(),
+    )
+
+    assert resolved["bullseye_source"] == "vision"
+    assert resolved["oracle_bullseye_pixel"] == [480.0, 120.0]
+    assert resolved["bullseye_pixel"] == [123.5, 45.25]
+    assert resolved["vision_bullseye_score"] == 0.9
+
+
+def test_resolve_tracking_info_does_not_fallback_to_oracle_when_vision_misses() -> None:
+    class FakeDetector:
+        def detect(self, frame_rgb: np.ndarray) -> BullseyeDetection | None:
+            return None
+
+    resolved = _resolve_tracking_info(
+        {
+            "bullseye_pixel": [480, 120],
+            "camera_fovy_deg": 60.0,
+            "camera_fovx_deg": 80.0,
+        },
+        np.zeros((480, 640, 3), dtype=np.uint8),
+        bullseye_source=BullseyeSource.VISION,
+        bullseye_detector=FakeDetector(),
+    )
+
+    assert resolved["bullseye_source"] == "vision"
+    assert resolved["oracle_bullseye_pixel"] == [480.0, 120.0]
+    assert "bullseye_pixel" not in resolved

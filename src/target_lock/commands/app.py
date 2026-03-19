@@ -5,7 +5,7 @@ from typing import Annotated
 import numpy as np
 import typer
 
-from target_lock.cli.common import AlignmentThreshold, run_session
+from target_lock.cli.common import AlignmentThreshold, BullseyeSource, run_session
 from target_lock.controllers import (
     ActionLayout,
     OpenLoopAimConfig,
@@ -13,6 +13,7 @@ from target_lock.controllers import (
     PidAimConfig,
     PidAimController,
 )
+from target_lock.vision import DEFAULT_AUTOAIM_REPO, YoloBullseyeDetector
 
 
 app = typer.Typer(
@@ -49,6 +50,10 @@ PitchStepOption = Annotated[
 FireOption = Annotated[
     bool,
     typer.Option("--fire/--no-fire", help="Fire whenever the target becomes aligned."),
+]
+BullseyeSourceOption = Annotated[
+    BullseyeSource,
+    typer.Option(help="Where the bullseye position comes from: simulator oracle or YOLO vision."),
 ]
 
 
@@ -95,6 +100,24 @@ def _build_pid_controller(
     )
 
 
+def _build_bullseye_detector(
+    *,
+    bullseye_source: BullseyeSource,
+    autoaim_repo: str,
+    onnx_path: str | None,
+    img_size_fallback: int,
+    score_threshold: float,
+):
+    if bullseye_source == BullseyeSource.ORACLE:
+        return None
+    return YoloBullseyeDetector(
+        autoaim_repo=autoaim_repo,
+        onnx_path=onnx_path,
+        img_size_fallback=img_size_fallback,
+        score_threshold=score_threshold,
+    )
+
+
 @app.command("static")
 def static_open_loop(
     server_addr: ServerAddrOption = "127.0.0.1:50051",
@@ -102,6 +125,11 @@ def static_open_loop(
     align_threshold_deg: AlignThresholdOption = 0.25,
     yaw_step_rad: YawStepOption = 0.08,
     pitch_step_rad: PitchStepOption = 0.08,
+    bullseye_source: BullseyeSourceOption = BullseyeSource.VISION,
+    autoaim_repo: Annotated[str, typer.Option(help="Path to the autoaim repository containing the YOLO model.")] = str(DEFAULT_AUTOAIM_REPO),
+    onnx_path: Annotated[str | None, typer.Option(help="Explicit path to the YOLO onnx model.")] = None,
+    img_size_fallback: Annotated[int, typer.Option(help="Fallback square input size when the model input shape is dynamic.")] = 640,
+    vision_score_threshold: Annotated[float, typer.Option(help="Ignore YOLO predictions below this confidence score.")] = 0.0,
     fire_when_aligned: FireOption = True,
 ) -> None:
     action_layout = _build_action_layout()
@@ -111,6 +139,13 @@ def static_open_loop(
             pitch_step_rad=pitch_step_rad,
             action_layout=action_layout,
         )
+    )
+    bullseye_detector = _build_bullseye_detector(
+        bullseye_source=bullseye_source,
+        autoaim_repo=autoaim_repo,
+        onnx_path=onnx_path,
+        img_size_fallback=img_size_fallback,
+        score_threshold=vision_score_threshold,
     )
     run_session(
         server_addr=server_addr,
@@ -122,6 +157,8 @@ def static_open_loop(
             elevation_deg=align_threshold_deg,
         ),
         fire_when_aligned=fire_when_aligned,
+        bullseye_source=bullseye_source,
+        bullseye_detector=bullseye_detector,
     )
 
 
@@ -148,6 +185,11 @@ def move_open_loop(
     pid_deadband: Annotated[float, typer.Option(help="PID deadband threshold.")] = 0.001,
     integral_limit: Annotated[float, typer.Option(help="Integral clamp limit.")] = 0.25,
     feedback_limit: Annotated[float, typer.Option(help="Feedback clamp limit.")] = 0.65,
+    bullseye_source: BullseyeSourceOption = BullseyeSource.VISION,
+    autoaim_repo: Annotated[str, typer.Option(help="Path to the autoaim repository containing the YOLO model.")] = str(DEFAULT_AUTOAIM_REPO),
+    onnx_path: Annotated[str | None, typer.Option(help="Explicit path to the YOLO onnx model.")] = None,
+    img_size_fallback: Annotated[int, typer.Option(help="Fallback square input size when the model input shape is dynamic.")] = 640,
+    vision_score_threshold: Annotated[float, typer.Option(help="Ignore YOLO predictions below this confidence score.")] = 0.0,
     fire_when_aligned: FireOption = True,
 ) -> None:
     rng = np.random.default_rng(seed)
@@ -169,6 +211,13 @@ def move_open_loop(
         pid_deadband=pid_deadband,
         integral_limit=integral_limit,
         feedback_limit=feedback_limit,
+    )
+    bullseye_detector = _build_bullseye_detector(
+        bullseye_source=bullseye_source,
+        autoaim_repo=autoaim_repo,
+        onnx_path=onnx_path,
+        img_size_fallback=img_size_fallback,
+        score_threshold=vision_score_threshold,
     )
 
     def action_mutator(step_idx: int, action: np.ndarray) -> np.ndarray:
@@ -199,6 +248,8 @@ def move_open_loop(
         ),
         fire_when_aligned=fire_when_aligned,
         action_mutator=action_mutator,
+        bullseye_source=bullseye_source,
+        bullseye_detector=bullseye_detector,
     )
 
 
@@ -279,6 +330,11 @@ def square_pid(
     pid_deadband: Annotated[float, typer.Option(help="PID deadband threshold.")] = 0.002,
     integral_limit: Annotated[float, typer.Option(help="Integral clamp limit.")] = 0.4,
     feedback_limit: Annotated[float, typer.Option(help="Feedback clamp limit.")] = 0.7,
+    bullseye_source: BullseyeSourceOption = BullseyeSource.VISION,
+    autoaim_repo: Annotated[str, typer.Option(help="Path to the autoaim repository containing the YOLO model.")] = str(DEFAULT_AUTOAIM_REPO),
+    onnx_path: Annotated[str | None, typer.Option(help="Explicit path to the YOLO onnx model.")] = None,
+    img_size_fallback: Annotated[int, typer.Option(help="Fallback square input size when the model input shape is dynamic.")] = 640,
+    vision_score_threshold: Annotated[float, typer.Option(help="Ignore YOLO predictions below this confidence score.")] = 0.0,
     fire_when_aligned: FireOption = True,
 ) -> None:
     rng = np.random.default_rng(seed)
@@ -301,6 +357,13 @@ def square_pid(
         pid_deadband=pid_deadband,
         integral_limit=integral_limit,
         feedback_limit=feedback_limit,
+    )
+    bullseye_detector = _build_bullseye_detector(
+        bullseye_source=bullseye_source,
+        autoaim_repo=autoaim_repo,
+        onnx_path=onnx_path,
+        img_size_fallback=img_size_fallback,
+        score_threshold=vision_score_threshold,
     )
 
     def action_mutator(step_idx: int, action: np.ndarray) -> np.ndarray:
@@ -329,6 +392,8 @@ def square_pid(
         ),
         fire_when_aligned=fire_when_aligned,
         action_mutator=action_mutator,
+        bullseye_source=bullseye_source,
+        bullseye_detector=bullseye_detector,
     )
 
 

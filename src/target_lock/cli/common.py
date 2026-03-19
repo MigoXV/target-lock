@@ -3,12 +3,14 @@ from __future__ import annotations
 import itertools
 import time
 from dataclasses import dataclass
+from enum import Enum
 from typing import Callable
 
 import numpy as np
 
 from target_lock.controllers import ActionLayout, AimController
 from target_lock.sim import LockonSession
+from target_lock.vision import BullseyeDetector, BullseyeDetection
 
 
 CONTROL_DT = 0.01
@@ -17,6 +19,11 @@ SCHEMATIC_TARGET_X = 0.5
 SCHEMATIC_TARGET_Y = 0.0
 SCHEMATIC_WORLD_X = (-1.0, 0.7)
 SCHEMATIC_WORLD_Y = (-1.0, 1.0)
+
+
+class BullseyeSource(str, Enum):
+    ORACLE = "oracle"
+    VISION = "vision"
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,6 +63,8 @@ def run_session(
     threshold: AlignmentThreshold,
     fire_when_aligned: bool,
     action_mutator: Callable[[int, np.ndarray], np.ndarray] | None = None,
+    bullseye_source: BullseyeSource = BullseyeSource.ORACLE,
+    bullseye_detector: BullseyeDetector | None = None,
 ) -> dict[str, object]:
     import cv2
 
@@ -77,6 +86,12 @@ def run_session(
                 step_result = session.step(action)
                 last_info = step_result.info
                 frame_rgb = session.decode_frame(step_result.observation, last_info)
+                last_info = _resolve_tracking_info(
+                    last_info,
+                    frame_rgb,
+                    bullseye_source=bullseye_source,
+                    bullseye_detector=bullseye_detector,
+                )
 
                 computed = controller.update(last_info, frame_rgb.shape, dt=CONTROL_DT)
                 if action_mutator is None:
@@ -104,6 +119,12 @@ def run_session(
                     fired = session.step(fire_action)
                     last_info = fired.info
                     frame_rgb = session.decode_frame(fired.observation, last_info)
+                    last_info = _resolve_tracking_info(
+                        last_info,
+                        frame_rgb,
+                        bullseye_source=bullseye_source,
+                        bullseye_detector=bullseye_detector,
+                    )
                     fire_info = last_info.get("fire", {})
                     if isinstance(fire_info, dict):
                         print(f"[FIRE] {fire_info}")
@@ -120,6 +141,51 @@ def run_session(
             cv2.destroyAllWindows()
 
     return {"last_info": last_info, "last_metrics": last_metrics}
+
+
+def _resolve_tracking_info(
+    info: dict[str, object],
+    frame_rgb: np.ndarray,
+    *,
+    bullseye_source: BullseyeSource,
+    bullseye_detector: BullseyeDetector | None,
+) -> dict[str, object]:
+    resolved = dict(info)
+    bullseye_pixel = resolved.get("bullseye_pixel")
+    if isinstance(bullseye_pixel, list) and len(bullseye_pixel) == 2:
+        resolved["oracle_bullseye_pixel"] = [float(bullseye_pixel[0]), float(bullseye_pixel[1])]
+
+    if bullseye_source == BullseyeSource.ORACLE:
+        resolved["bullseye_source"] = BullseyeSource.ORACLE.value
+        return resolved
+
+    resolved["bullseye_source"] = BullseyeSource.VISION.value
+    resolved.pop("bullseye_pixel", None)
+    resolved.pop("vision_bullseye_score", None)
+    resolved.pop("vision_bullseye_norm", None)
+
+    if bullseye_detector is None:
+        return resolved
+
+    detection = bullseye_detector.detect(frame_rgb)
+    return _apply_bullseye_detection(resolved, detection)
+
+
+def _apply_bullseye_detection(
+    info: dict[str, object],
+    detection: BullseyeDetection | None,
+) -> dict[str, object]:
+    resolved = dict(info)
+    resolved.pop("bullseye_pixel", None)
+    resolved.pop("vision_bullseye_score", None)
+    resolved.pop("vision_bullseye_norm", None)
+    if detection is None:
+        return resolved
+
+    resolved["bullseye_pixel"] = detection.to_pixel_list()
+    resolved["vision_bullseye_score"] = detection.score
+    resolved["vision_bullseye_norm"] = [detection.x_norm, detection.y_norm]
+    return resolved
 
 
 def _build_display(frame_rgb: np.ndarray, info: dict[str, object], metrics: dict[str, float] | None) -> np.ndarray:
@@ -141,12 +207,27 @@ def _draw_overlay(frame: np.ndarray, info: dict[str, object], metrics: dict[str,
 
     bullseye_pixel = info.get("bullseye_pixel")
     if isinstance(bullseye_pixel, list) and len(bullseye_pixel) == 2:
-        cv2.circle(frame, (int(float(bullseye_pixel[0])), int(float(bullseye_pixel[1]))), 5, (255, 0, 0), -1)
+        cv2.circle(frame, (int(float(bullseye_pixel[0])), int(float(bullseye_pixel[1]))), 5, (0, 255, 255), -1)
 
-    if metrics is None:
-        return
+    oracle_bullseye_pixel = info.get("oracle_bullseye_pixel")
+    if isinstance(oracle_bullseye_pixel, list) and len(oracle_bullseye_pixel) == 2:
+        cv2.circle(
+            frame,
+            (int(float(oracle_bullseye_pixel[0])), int(float(oracle_bullseye_pixel[1]))),
+            4,
+            (255, 0, 0),
+            1,
+        )
 
-    lines = [f"{key}={value:.3f}" for key, value in metrics.items()]
+    lines = []
+    bullseye_source = info.get("bullseye_source")
+    if isinstance(bullseye_source, str):
+        lines.append(f"target_src={bullseye_source}")
+    vision_score = info.get("vision_bullseye_score")
+    if isinstance(vision_score, (float, int)):
+        lines.append(f"vision_score={float(vision_score):.3f}")
+    if metrics is not None:
+        lines.extend(f"{key}={value:.3f}" for key, value in metrics.items())
     qpos = info.get("qpos")
     if isinstance(qpos, list) and len(qpos) >= 5:
         lines.append(
