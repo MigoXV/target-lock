@@ -32,6 +32,25 @@ def test_move_command_loads_config_and_dispatches(monkeypatch) -> None:
     assert config.session.fire_when_aligned is False
 
 
+def test_move_command_can_enable_manual_base_control(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_run_move(config: MoveCommandConfig):
+        captured["config"] = config
+        return {"last_info": {}, "last_metrics": None}
+
+    monkeypatch.setattr(app_module, "run_move", fake_run_move)
+
+    app_module.move_pid(
+        config=app_module.DEFAULT_MOVE_CONFIG_PATH,
+        manual_base_control=True,
+    )
+
+    config = captured["config"]
+    assert isinstance(config, MoveCommandConfig)
+    assert config.motion.manual_base_control is True
+
+
 def test_run_move_builds_runner_with_move_defaults(monkeypatch) -> None:
     captured: dict[str, object] = {}
     detector = object()

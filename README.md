@@ -25,6 +25,15 @@ target-lock move
 target-lock move --config examples/move/config.yaml
 ```
 
+也可以通过环境变量开启手动底座控制：
+
+```bash
+export TARGET_LOCK_MANUAL_BASE_CONTROL=1
+target-lock move
+```
+
+手动模式下使用 `W/S` 控制前后、`A/D` 控制左右、`Q/E` 控制底座旋转，空格停止底座动作。
+
 仍然兼容旧入口：
 
 ```bash

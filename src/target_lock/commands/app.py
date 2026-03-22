@@ -47,18 +47,30 @@ FireOption = Annotated[
     ),
 ]
 
+ManualBaseControlOption = Annotated[
+    bool | None,
+    typer.Option(
+        "--manual-base-control/--no-manual-base-control",
+        envvar="TARGET_LOCK_MANUAL_BASE_CONTROL",
+        help="Use WASD/QE keyboard input for base movement and rotation instead of random motion.",
+    ),
+]
+
 
 @app.command("move")
 def move_pid(
     config: ConfigPathOption = DEFAULT_MOVE_CONFIG_PATH,
     max_steps: MaxStepsOption = None,
     fire: FireOption = None,
+    manual_base_control: ManualBaseControlOption = None,
 ) -> None:
     loaded = load_move_config(config)
     if max_steps is not None:
         loaded.session.max_steps = max_steps
     if fire is not None:
         loaded.session.fire_when_aligned = fire
+    if manual_base_control is not None:
+        loaded.motion.manual_base_control = manual_base_control
     run_move(loaded)
 
 

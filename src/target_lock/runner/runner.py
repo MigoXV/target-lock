@@ -111,9 +111,11 @@ class Runner:
                         if step_idx % FRAME_SKIP == 0:
                             display = self._build_display(frame_rgb, last_info, last_metrics)
                             cv2.imshow("target-lock", display)
-                            key = cv2.waitKey(1)
-                            if (key & 0xFF) == 27:
-                                break
+
+                        key = cv2.waitKey(1)
+                        self._handle_action_mutator_key(key)
+                        if (key & 0xFF) == 27:
+                            break
 
                         time.sleep(CONTROL_DT)
                 finally:
@@ -140,6 +142,14 @@ class Runner:
         if self.action_layout.fire_index is not None:
             action[self.action_layout.fire_index] = 0.0
         return action
+
+    def _handle_action_mutator_key(self, key: int) -> None:
+        mutator = self.action_mutator
+        if mutator is None:
+            return
+        handle_key = getattr(mutator, "handle_key", None)
+        if callable(handle_key):
+            handle_key(key)
 
     def _resolve_tracking_info(
         self,

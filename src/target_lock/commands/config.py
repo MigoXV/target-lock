@@ -63,6 +63,7 @@ class ControllerConfig:
 
 @dataclass(slots=True)
 class MotionConfig:
+    manual_base_control: bool = False
     move_speed: float = 0.08
     base_rot_scale: float = 0.025
     hold_steps: int = 120

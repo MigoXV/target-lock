@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from target_lock.runner.move import random_trajectory_action, square_trajectory_action
+from target_lock.runner.move import ManualBaseMotionMutator, random_trajectory_action, square_trajectory_action
 
 
 def test_square_trajectory_cycles_four_edges() -> None:
@@ -52,3 +52,29 @@ def test_random_trajectory_holds_sample_between_updates() -> None:
     assert first[0] != 0.0
     assert first[1] != 0.0
     assert np.linalg.norm(first[:2]) <= 0.3 + 1e-6
+
+
+def test_manual_base_motion_mutator_maps_wasd_qe_to_base_axes() -> None:
+    mutator = ManualBaseMotionMutator(move_speed=0.2, base_rot_scale=0.05, key_latch_seconds=10.0)
+    action = np.zeros(6, dtype=np.float32)
+
+    mutator.handle_key(ord("w"))
+    assert np.allclose(mutator(0, action.copy())[:3], np.array([0.2, 0.0, 0.0], dtype=np.float32))
+
+    mutator.handle_key(ord("s"))
+    assert np.allclose(mutator(0, action.copy())[:3], np.array([-0.2, 0.0, 0.0], dtype=np.float32))
+
+    mutator.handle_key(ord("a"))
+    assert np.allclose(mutator(0, action.copy())[:3], np.array([0.0, 0.2, 0.0], dtype=np.float32))
+
+    mutator.handle_key(ord("d"))
+    assert np.allclose(mutator(0, action.copy())[:3], np.array([0.0, -0.2, 0.0], dtype=np.float32))
+
+    mutator.handle_key(ord("q"))
+    assert np.allclose(mutator(0, action.copy())[:3], np.array([0.0, 0.0, 0.05], dtype=np.float32))
+
+    mutator.handle_key(ord("e"))
+    assert np.allclose(mutator(0, action.copy())[:3], np.array([0.0, 0.0, -0.05], dtype=np.float32))
+
+    mutator.handle_key(ord(" "))
+    assert np.allclose(mutator(0, action.copy())[:3], np.zeros(3, dtype=np.float32))
